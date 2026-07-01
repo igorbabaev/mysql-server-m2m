@@ -1038,6 +1038,7 @@ bool Explain_table_base::explain_extra_common(int range_scan_type, uint keyno) {
   switch (range_scan_type) {
     case AccessPath::ROWID_UNION:
     case AccessPath::ROWID_INTERSECTION:
+    case AccessPath::INDEX_INTERSECTION:
     case AccessPath::INDEX_MERGE: {
       StringBuffer<32> buff(cs);
       add_info_string(range_scan_path, &buff);

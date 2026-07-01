@@ -221,6 +221,12 @@ void WalkAccessPaths(AccessPathPtr path, JoinPtr join,
                         std::forward<Func &&>(func), post_order_traversal);
       }
       break;
+    case AccessPath::INDEX_INTERSECTION:
+      for (AccessPath *child : *path->index_intersection().children) {
+        WalkAccessPaths(child, join, cross_query_blocks,
+                        std::forward<Func &&>(func), post_order_traversal);
+      }
+      break;
     case AccessPath::ROWID_INTERSECTION:
       for (AccessPath *child : *path->rowid_intersection().children) {
         WalkAccessPaths(child, join, cross_query_blocks,
@@ -339,6 +345,7 @@ void WalkTablesUnderAccessPath(AccessPath *root_path, Func &&func,
           case AccessPath::WEEDOUT:
           case AccessPath::ZERO_ROWS_AGGREGATED:
           case AccessPath::INDEX_MERGE:
+          case AccessPath::INDEX_INTERSECTION:
           case AccessPath::ROWID_INTERSECTION:
           case AccessPath::ROWID_UNION:
           case AccessPath::DELETE_ROWS:

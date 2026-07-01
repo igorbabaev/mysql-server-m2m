@@ -123,6 +123,7 @@
 #include "sql/psi_memory_key.h"
 #include "sql/range_optimizer/group_index_skip_scan_plan.h"
 #include "sql/range_optimizer/index_merge_plan.h"
+#include "sql/range_optimizer/index_intersect_plan.h"
 #include "sql/range_optimizer/index_range_scan_plan.h"
 #include "sql/range_optimizer/index_skip_scan_plan.h"
 #include "sql/range_optimizer/internal.h"
@@ -566,6 +567,9 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
   const bool index_merge_intersect_allowed =
       index_merge_allowed &&
       thd->optimizer_switch_flag(OPTIMIZER_SWITCH_INDEX_MERGE_INTERSECT);
+  const bool index_merge_sort_intersect_allowed =
+      index_merge_allowed &&
+      thd->optimizer_switch_flag(OPTIMIZER_SWITCH_INDEX_MERGE_SORT_INTERSECT);
 
   /* Calculate cost of full index read for the shortest covering index */
   if (!table->covering_keys.is_clear_all()) {
@@ -720,6 +724,25 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
       }
     }
 
+    if (index_merge_sort_intersect_allowed) {
+      // Here we try to build an index intersect plan
+      param.skip_records_in_range = skip_records_in_range;
+      double cutoff_cost = best_cost;
+      if (hint_table_state(thd, param.table->pos_in_table_list,
+			   INDEX_MERGE_HINT_ENUM, 0) &&
+	  best_path && best_path->type != AccessPath::ROWID_INTERSECTION) {
+          cutoff_cost = DBL_MAX;
+      }
+
+      AccessPath *intersect_path = get_best_index_intersect(&param, table,
+                                                            tree, cutoff_cost,
+                                                            false);
+      if (intersect_path) {
+        best_path = intersect_path;
+        best_cost = best_path->cost();
+      }
+    }
+
     // Here we calculate cost of union index merge
     if (!tree->merges.is_empty()) {
       // Cannot return rows in descending order.
@@ -748,9 +771,13 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
             best_conj_path = new_conj_path;
           }
         }
-        if (best_conj_path) best_path = best_conj_path;
+        if (best_conj_path) {
+          best_path = best_conj_path;
+          best_cost = best_path->cost();
+        }
       }
     }
+
   }
 
   /*

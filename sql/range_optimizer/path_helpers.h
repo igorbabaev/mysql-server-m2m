@@ -33,6 +33,7 @@
 #include "sql/join_optimizer/access_path.h"
 #include "sql/range_optimizer/group_index_skip_scan_plan.h"
 #include "sql/range_optimizer/index_merge_plan.h"
+#include "sql/range_optimizer/index_intersect_plan.h"
 #include "sql/range_optimizer/index_range_scan_plan.h"
 #include "sql/range_optimizer/index_skip_scan_plan.h"
 #include "sql/range_optimizer/range_optimizer.h"
@@ -157,6 +158,14 @@ inline void get_fields_used(const AccessPath *path, MY_BITMAP *used_fields) {
         get_fields_used(child, used_fields);
       }
       break;
+    case AccessPath::INDEX_INTERSECTION:
+      for (AccessPath *child : *path->index_intersection().children) {
+        get_fields_used(child, used_fields);
+      }
+      if (path->index_intersection().cpk_child != nullptr) {
+        get_fields_used(path->index_intersection().cpk_child, used_fields);
+      }
+      break;
     case AccessPath::ROWID_INTERSECTION:
       for (AccessPath *child : *path->rowid_intersection().children) {
         get_fields_used(child, used_fields);
@@ -199,6 +208,7 @@ inline unsigned get_used_key_parts(const AccessPath *path) {
     case AccessPath::GROUP_INDEX_SKIP_SCAN:
       return path->group_index_skip_scan().num_used_key_parts;
     case AccessPath::INDEX_MERGE:
+    case AccessPath::INDEX_INTERSECTION:
     case AccessPath::ROWID_INTERSECTION:
     case AccessPath::ROWID_UNION:
       return 0;
@@ -322,6 +332,26 @@ inline void add_info_string(const AccessPath *path, String *str) {
       str->append(')');
       break;
     }
+    case AccessPath::INDEX_INTERSECTION: {
+      bool first = true;
+      str->append(STRING_WITH_LEN("sort_intersection("));
+
+      // For EXPLAIN compatibility with older versions, PRIMARY is always
+      // printed last.
+      for (AccessPath *child : *path->index_intersection().children) {
+        if (!first)
+          str->append(',');
+        else
+          first = false;
+        ::add_info_string(child, str);
+      }
+      if (path->index_intersection().cpk_child) {
+        str->append(',');
+        ::add_info_string(path->index_intersection().cpk_child, str);
+      }
+      str->append(')');
+      break;
+    }
     case AccessPath::ROWID_INTERSECTION: {
       bool first = true;
       str->append(STRING_WITH_LEN("intersect("));
@@ -392,6 +422,9 @@ inline void add_keys_and_lengths(const AccessPath *path, String *key_names,
     }
     case AccessPath::INDEX_MERGE:
       add_keys_and_lengths_index_merge(path, key_names, used_lengths);
+      break;
+    case AccessPath::INDEX_INTERSECTION:
+      add_keys_and_lengths_index_intersection(path, key_names, used_lengths);
       break;
     case AccessPath::ROWID_INTERSECTION:
       add_keys_and_lengths_rowid_intersection(path, key_names, used_lengths);

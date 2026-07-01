@@ -38,6 +38,8 @@
 
 class Cost_model_table;
 struct TABLE;
+class Uniq_param;
+class THD;
 
 /**
    Unique -- class for unique (removing of duplicates).
@@ -51,6 +53,8 @@ struct TABLE;
 */
 
 class Unique {
+
+ protected:
   /// Array of file pointers
   Prealloced_array<Merge_chunk, 16> file_ptrs;
   /// Max elements in memory buffer
@@ -61,11 +65,24 @@ class Unique {
   IO_CACHE file;
   /// Tree to filter duplicates in memory
   TREE tree;
-  uchar *record_pointers;
   /// Flush tree to disk
   bool flush();
+  uchar *record_pointers;
   /// Element size
   uint size;
+  /// Length of the record for an element in merge buffers
+  uint rec_length;
+  /// Action to flush elements from tree to file
+  tree_walk_action flush_element_to_file;
+  /// Action to write from tree to ptrs
+  tree_walk_action action_write_to_ptrs;
+
+  virtual int Merge_buffers(THD *thd, Uniq_param *param, IO_CACHE *from_file,
+                            IO_CACHE *to_file, Sort_buffer sort_buffer,
+                            Merge_chunk *last_chunk,
+                            Merge_chunk_array chunk_array, int flag);
+
+  virtual ulong get_n_record_pointers();
 
  public:
   ulong elements;
@@ -106,10 +123,16 @@ class Unique {
   uint get_size() const { return size; }
   ulonglong get_max_in_memory_size() const { return max_in_memory_size; }
   bool is_in_memory() { return elements == 0; }
+
   friend int unique_write_to_file(void *v_key, element_count count,
                                   void *unique);
   friend int unique_write_to_ptrs(void *v_key, element_count count,
                                   void *unique);
+  friend int unique_counted_write_to_ptrs(void *v_key, element_count count,
+                                          void *v_unique);
+
+  friend int unique_counted_write_to_file(void* v_key, element_count count,
+                                          void *v_unique);
 };
 
 /**
@@ -160,5 +183,34 @@ class Unique_on_insert {
   */
   void cleanup();
 };
+
+struct Merge_chunk_compare_context {
+  qsort2_cmp key_compare;
+  const void *key_compare_arg;
+};
+
+class Uniq_param {
+ public:
+  uint rec_length;           // Length of sorted records.
+  uint max_keys_per_buffer;  // Max keys / buffer.
+  ha_rows max_rows;          // Select limit, or HA_POS_ERROR if unlimited.
+
+  uchar *unique_buff;
+  bool not_killable;
+
+  // The fields below are used only by Unique class.
+  Merge_chunk_compare_context cmp_context;
+  typedef int (*chunk_compare_fun)(Merge_chunk_compare_context *ctx,
+                                   uchar *arg1, uchar *arg2);
+  chunk_compare_fun compare;
+
+  Uniq_param() { memset(this, 0, sizeof(*this)); }
+
+  // Not copyable
+  Uniq_param(const Uniq_param &) = delete;
+  Uniq_param &operator=(const Uniq_param &) = delete;
+};
+
+double log2_n_fact(ulong n);
 
 #endif  // UNIQUES_INCLUDED

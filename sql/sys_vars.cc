@@ -202,6 +202,7 @@ static constexpr const unsigned long long OPTIMIZER_SWITCH_DEFAULT{
     OPTIMIZER_SWITCH_INDEX_MERGE | OPTIMIZER_SWITCH_INDEX_MERGE_UNION |
     OPTIMIZER_SWITCH_INDEX_MERGE_SORT_UNION |
     OPTIMIZER_SWITCH_INDEX_MERGE_INTERSECT |
+//    OPTIMIZER_SWITCH_INDEX_MERGE_SORT_INTERSECT |
     OPTIMIZER_SWITCH_ENGINE_CONDITION_PUSHDOWN |
     OPTIMIZER_SWITCH_INDEX_CONDITION_PUSHDOWN | OPTIMIZER_SWITCH_MRR |
     OPTIMIZER_SWITCH_MRR_COST_BASED | OPTIMIZER_SWITCH_BNL |
@@ -3269,6 +3270,7 @@ static const char *optimizer_switch_names[] = {
     "hypergraph_optimizer",  // Deliberately not documented below.
     "derived_condition_pushdown",
     "hash_set_operations",
+    "index_merge_sort_intersection",
     "default",
     NullS};
 static Sys_var_flagset Sys_optimizer_switch(
@@ -3282,7 +3284,8 @@ static Sys_var_flagset Sys_optimizer_switch(
     " block_nested_loop, batched_key_access, use_index_extensions,"
     " condition_fanout_filter, derived_merge, hash_join,"
     " subquery_to_derived, prefer_ordering_index,"
-    " derived_condition_pushdown, hash_set_operations} and val is one of "
+    " derived_condition_pushdown, hash_set_operations,"
+    " index_merge_sort_intersection} and val is one of "
     "{on, off, default}",
     HINT_UPDATEABLE SESSION_VAR(optimizer_switch), CMD_LINE(REQUIRED_ARG),
     optimizer_switch_names, DEFAULT(OPTIMIZER_SWITCH_DEFAULT), NO_MUTEX_GUARD,

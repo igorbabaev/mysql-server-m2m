@@ -1275,6 +1275,16 @@ static unique_ptr<Json_object> SetObjectMembers(
       }
       break;
     }
+    case AccessPath::INDEX_INTERSECTION: {
+       error |=
+          AddMemberToObject<Json_string>(obj, "access_type",
+                                         "index_intersection");
+      description = "Intersection by row ID";
+      for (AccessPath *child : *path->index_intersection().children) {
+        children->push_back({child});
+      }
+      break;
+    }
     case AccessPath::ROWID_INTERSECTION: {
       error |= AddMemberToObject<Json_string>(obj, "access_type",
                                               "rowid_intersection");

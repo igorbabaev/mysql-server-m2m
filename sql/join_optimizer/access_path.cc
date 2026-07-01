@@ -60,6 +60,7 @@
 #include "sql/range_optimizer/geometry_index_range_scan.h"
 #include "sql/range_optimizer/group_index_skip_scan.h"
 #include "sql/range_optimizer/group_index_skip_scan_plan.h"
+#include "sql/range_optimizer/index_intersect.h"
 #include "sql/range_optimizer/index_merge.h"
 #include "sql/range_optimizer/index_range_scan.h"
 #include "sql/range_optimizer/index_skip_scan.h"
@@ -243,6 +244,8 @@ TABLE *GetBasicTable(const AccessPath *path) {
       return path->index_range_scan().used_key_part[0].field->table;
     case AccessPath::INDEX_MERGE:
       return path->index_merge().table;
+    case AccessPath::INDEX_INTERSECTION:
+      return path->index_intersection().table;
     case AccessPath::ROWID_INTERSECTION:
       return path->rowid_intersection().table;
     case AccessPath::ROWID_UNION:
@@ -675,6 +678,46 @@ unique_ptr_destroy_only<RowIterator> CreateIteratorFromAccessPath(
 
         iterator = NewIterator<IndexMergeIterator>(
             thd, mem_root, mem_root, param.table, std::move(pk_quick_select),
+            std::move(children));
+        break;
+      }
+      case AccessPath::INDEX_INTERSECTION: {
+        const auto &param = path->index_intersection();
+        if (job.children.is_null()) {
+          job.AllocChildren(mem_root, param.children->size() +
+                                          (param.cpk_child != nullptr ? 1 : 0));
+          todo.push_back(job);
+          for (size_t child_idx = 0; child_idx < param.children->size();
+               ++child_idx) {
+            todo.push_back({(*param.children)[child_idx],
+                            join,
+                            /*eligible_for_batch_mode=*/false,
+                            &job.children[child_idx],
+                            {}});
+          }
+          if (param.cpk_child != nullptr) {
+            todo.push_back({param.cpk_child,
+                            join,
+                            /*eligible_for_batch_mode=*/false,
+                            &job.children[param.children->size()],
+                            {}});
+          }
+            continue;
+        }
+
+        Mem_root_array<unique_ptr_destroy_only<RowIterator>> children(mem_root);
+        children.reserve(param.children->size());
+        for (size_t child_idx = 0; child_idx < param.children->size();
+             ++child_idx) {
+          children.push_back(std::move(job.children[child_idx]));
+        }
+        unique_ptr_destroy_only<RowIterator> cpk_child;
+        if (param.cpk_child != nullptr) {
+          cpk_child = std::move(job.children[param.children->size()]);
+        }
+
+        iterator = NewIterator<IndexIntersectIterator>(
+	    thd, mem_root, mem_root, param.table, std::move(cpk_child),
             std::move(children));
         break;
       }

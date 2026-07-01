@@ -1,0 +1,196 @@
+set global sort_buffer_size=1024*1024*8;
+create table t10 (a int) engine=myisam;
+insert into t10 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+create table t100 as select 10*r2.a+r1.a as a from t10 as r1, t10 as r2;
+create table t1K as select 10*r2.a+r1.a as a from t10 as r1, t100 as r2;
+create table t100K as select 100*r2.a + r1.a as a from t100 as r1, t1K as r2;
+create table ta (pk int primary key auto_increment, a int) engine=myisam;
+insert into ta(a) select a mod 1000 from t100K order by rand(13);
+create table tb (pk int primary key auto_increment, a int) engine=myisam;
+insert into tb(a) select a mod 500 from t100K order by rand(17);
+create table tc (pk int primary key auto_increment, a int) engine=myisam;
+insert into tc(a) select a mod 2000 from t100K order by rand(19);
+create table t1(
+pk int primary key auto_increment,
+a int,
+b int,
+c int,
+d int,
+filler1 char(255) default 'xxx',
+filler2 char(255) default 'yyy',
+filler3 char(255) default 'zzz'
+) engine=innodb;
+insert into t1(a,b,c,d,filler1,filler2)
+  select ta.a, tb.a, tc.a, ta.a,
+         concat('xxx',ta.pk),
+         concat(concat(concat(concat('yyy',tc.a),tc.a),tc.a),tc.a)
+  from ta, tb, tc
+    where ta.pk = tb.pk and ta.pk = tc.pk;
+drop table ta,tb,tc;
+create index idx_a on t1(a);
+create index idx_b on t1(b);
+create index idx_c on t1(c);
+analyze table t1;
+
+update mysql.server_cost set cost_value=0.0002
+  where cost_name='key_compare_cost';
+update mysql.server_cost set cost_value=0.005
+  where cost_name='row_evaluate_cost';
+flush optimizer_costs;
+
+set global sort_buffer_size=default;
+set global innodb_stats_persistent=on;
+
+# Create a user connection
+connect (con1,localhost,root,,);
+
+set optimizer_switch='index_merge_sort_intersection=on';
+
+select @@sort_buffer_size;
+
+--echo # index intersect of 2 secondary indeces over 2 sargable ranges
+explain
+select * from t1 where a between 0 and 19 and b between 0 and 9;
+select * from t1 where a between 0 and 19 and b between 0 and 9;
+select sum(pk) from t1 where a between 0 and 19 and b between 0 and 9;
+--echo # check with index range
+select * from t1 force index (idx_a)
+  where a between 0 and 19 and b between 0 and 9
+order by pk;
+select sum(pk) from t1 force index (idx_a)
+  where a between 0 and 19 and b between 0 and 9;
+
+--echo # index intersect of primary and secondary indeces over 2 sargable ranges
+explain
+select * from t1 where a between 0 and 4 and pk between 1 and 10000;
+select * from t1 where a between 0 and 4 and pk between 1 and 10000;
+select sum(pk) from t1 where a between 0 and 4 and pk between 1 and 10000;
+--echo # check with index scan
+select * from t1 force index (idx_b)
+  where a between 0 and 4 and pk between 1 and 10000
+order by pk;
+select sum(pk) from t1 force index (idx_b)
+  where a between 0 and 4 and pk between 1 and 10000;
+
+--echo # index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+  where a between 0 and 39 and b between 0 and 19 and c between 0 and 79;
+select * from t1
+  where a between 0 and 39 and b between 0 and 19 and c between 0 and 79;
+--echo # check with index scan
+select * from t1 force index (idx_a)
+  where a between 0 and 39 and b between 0 and 19 and c between 0 and 79
+order by pk;
+
+--echo # index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+  where a between 40 and 79 and b between 0 and 19 and c between 0 and 74;
+select * from t1
+  where a between 40 and 79 and b between 0 and 19 and c between 0 and 74;
+--echo # check with index scan
+select * from t1 force index (idx_a)
+  where a between 40 and 79 and b between 0 and 19 and c between 0 and 74
+order by pk;
+
+--echo # index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+  where a between 0 and 39 and b between 20 and 37 and c between 0 and 79;
+select * from t1
+  where a between 0 and 39 and b between 20 and 37 and c between 0 and 79;
+--echo # check with index scan
+select * from t1 force index (idx_a)
+  where a between 0 and 39 and b between 20 and 37 and c between 0 and 79
+order by pk;
+
+--echo # intersect of primary and 2 secondary indeces over 3 sargable ranges
+explain
+select count(distinct a,b,c) from t1
+  where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+select count(distinct a,b,c) from t1
+  where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+select sum(pk) from t1
+  where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+--echo # check with index scan
+select count(distinct a,b,c) from t1 force index (idx_a)
+  where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+select sum(pk) from t1 force index (idx_a)
+  where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+
+--echo # index intersect of 2 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+  where a between 20 and 59 and b between 20 and 94 and c between 10 and 79;
+select * from t1
+  where a between 20 and 59 and b between 20 and 94 and c between 10 and 79;
+--echo # check with index scan
+select * from t1 force index (idx_a)
+  where a between 20 and 59 and b between 20 and 94 and c between 10 and 79
+order by pk;
+
+--echo # intersect of primary and 1 secondary indeces over 3 sargable ranges
+explain
+select count(distinct a,b,c) from t1
+  where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+select count(distinct a,b,c) from t1
+  where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+select sum(pk) from t1
+  where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+--echo # check with index scan
+select count(distinct a,b,c) from t1 force index (idx_a)
+  where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+select sum(pk) from t1 force index (idx_a)
+  where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+
+disconnect con1;
+--source include/wait_until_disconnected.inc
+
+connection default;
+set global sort_buffer_size=1024*32;
+
+connect (con1,localhost,root,,);
+
+set optimizer_switch='index_merge_sort_intersection=on';
+
+--echo # test how index intersection works with a small sort buffer
+
+select @@sort_buffer_size;
+
+--echo # intersect of primary and secondary indeces over 2 sargable ranges
+
+# as index intersect is expensive when intersection of subsets of
+# rowids / primary keys  is expensive a hint has to be used here
+
+explain
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ count(distinct a,b,c) from t1
+  where a between 0 and 99 and b between 0 and 49;
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ count(distinct a,b,c) from t1
+  where a between 0 and 99 and b between 0 and 49;
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ sum(pk) from t1
+  where a between 0 and 99 and b between 0 and 49;
+--echo # check with index scan
+explain
+select count(distinct a,b,c) from t1 force index (idx_a)
+  where a between 0 and 99 and b between 0 and 49;
+select count(distinct a,b,c) from t1 use index (idx_a)
+  where a between 0 and 99 and b between 0 and 49;
+select sum(pk) from t1 force index (idx_a)
+  where a between 0 and 99 and b between 0 and 49;
+
+disconnect con1;
+--source include/wait_until_disconnected.inc
+connection default;
+
+drop table t1;
+drop table t100K,t1K,t100,t10;
+
+update mysql.server_cost set cost_value=default_value
+  where cost_name='key_compare_cost';
+update mysql.server_cost set cost_value=default_value
+  where cost_name='row_evaluate_cost';
+flush optimizer_costs;
+
+set global sort_buffer_size=default;
+set global innodb_stats_persistent=default;

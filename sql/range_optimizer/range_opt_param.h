@@ -30,6 +30,7 @@ class RANGE_OPT_PARAM {
  public:
   TABLE *table;             /* Table being analyzed */
   Query_block *query_block; /* Query block the table is part of */
+  bool skip_records_in_range;
 
   /* Array of parts of all keys for which range analysis is performed */
   KEY_PART *key_parts;

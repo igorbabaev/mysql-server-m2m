@@ -483,6 +483,8 @@ SET(SQL_SHARED_SOURCES
   range_optimizer/geometry_index_range_scan.cc
   range_optimizer/group_index_skip_scan.cc
   range_optimizer/group_index_skip_scan_plan.cc
+  range_optimizer/index_intersect.cc
+  range_optimizer/index_intersect_plan.cc
   range_optimizer/index_merge.cc
   range_optimizer/index_merge_plan.cc
   range_optimizer/index_range_scan.cc
@@ -626,6 +628,7 @@ SET(SQL_SHARED_SOURCES
   trigger_chain.cc
   tztime.cc
   uniques.cc
+  uniques_counted.cc
   xa.cc
   xa/recovery.cc
   xa/sql_xa_second_phase.cc

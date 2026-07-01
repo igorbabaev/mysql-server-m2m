@@ -74,6 +74,7 @@ class IndexRangeScanIterator : public RowIDCapableRowIterator {
   friend range_seq_t quick_range_seq_init(void *init_param, uint n_ranges,
                                           uint flags);
   friend class IndexMergeIterator;
+  friend class IndexIntersectIterator;
   friend class RowIDIntersectionIterator;
 
   Bounds_checked_array<QUICK_RANGE *> ranges; /* ordered array of range ptrs */

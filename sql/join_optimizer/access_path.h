@@ -244,6 +244,7 @@ struct AccessPath {
     FOLLOW_TAIL,
     INDEX_RANGE_SCAN,
     INDEX_MERGE,
+    INDEX_INTERSECTION,
     ROWID_INTERSECTION,
     ROWID_UNION,
     INDEX_SKIP_SCAN,
@@ -630,6 +631,14 @@ struct AccessPath {
   const auto &index_merge() const {
     assert(type == INDEX_MERGE);
     return u.index_merge;
+  }
+  auto &index_intersection() {
+    assert(type == INDEX_INTERSECTION);
+    return u.index_intersection;
+  }
+  const auto &index_intersection() const {
+    assert(type == INDEX_INTERSECTION);
+    return u.index_intersection;
   }
   auto &rowid_intersection() {
     assert(type == ROWID_INTERSECTION);
@@ -1042,6 +1051,12 @@ struct AccessPath {
       bool allow_clustered_primary_key_scan;
       Mem_root_array<AccessPath *> *children;
     } index_merge;
+    struct {
+      TABLE *table;
+      bool forced_by_hint;
+      Mem_root_array<AccessPath *> *children;
+      AccessPath *cpk_child;
+    } index_intersection;
     struct {
       TABLE *table;
       Mem_root_array<AccessPath *> *children;

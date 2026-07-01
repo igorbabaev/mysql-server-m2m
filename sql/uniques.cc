@@ -70,45 +70,14 @@
 #include "sql/sql_tmp_table.h"  // create_duplicate_weedout_tmp_table
 #include "sql/table.h"
 
-namespace {
-
-struct Merge_chunk_compare_context {
-  qsort2_cmp key_compare;
-  const void *key_compare_arg;
-};
-
-class Uniq_param {
- public:
-  uint rec_length;           // Length of sorted records.
-  uint max_keys_per_buffer;  // Max keys / buffer.
-  ha_rows max_rows;          // Select limit, or HA_POS_ERROR if unlimited.
-
-  uchar *unique_buff;
-  bool not_killable;
-
-  // The fields below are used only by Unique class.
-  Merge_chunk_compare_context cmp_context;
-  typedef int (*chunk_compare_fun)(Merge_chunk_compare_context *ctx,
-                                   uchar *arg1, uchar *arg2);
-  chunk_compare_fun compare;
-
-  Uniq_param() { memset(this, 0, sizeof(*this)); }
-
-  // Not copyable
-  Uniq_param(const Uniq_param &) = delete;
-  Uniq_param &operator=(const Uniq_param &) = delete;
-};
-
-}  // namespace
-
 /**
   Read data to buffer.
 
   @returns
     (uint)-1 if something goes wrong
 */
-static uint uniq_read_to_buffer(IO_CACHE *fromfile, Merge_chunk *merge_chunk,
-                                Uniq_param *param) {
+uint uniq_read_to_buffer(IO_CACHE *fromfile, Merge_chunk *merge_chunk,
+                         Uniq_param *param) {
   DBUG_TRACE;
   const uint rec_length = param->rec_length;
 
@@ -343,6 +312,14 @@ int unique_write_to_file(void *v_key, element_count, void *v_unique) {
   return my_b_write(&unique->file, key, unique->size) ? 1 : 0;
 }
 
+int Unique::Merge_buffers(THD *thd, Uniq_param *param, IO_CACHE *from_file,
+                          IO_CACHE *to_file, Sort_buffer sort_buffer,
+                          Merge_chunk *last_chunk, Merge_chunk_array chunk_array,
+                          int flag) {
+  return merge_buffers(thd, param, from_file, to_file, sort_buffer, last_chunk,
+                       chunk_array, flag);
+}
+
 int unique_write_to_ptrs(void *v_key, element_count, void *v_unique) {
   uchar *key = static_cast<uchar *>(v_key);
   Unique *unique = static_cast<Unique *>(v_unique);
@@ -358,12 +335,16 @@ Unique::Unique(qsort2_cmp comp_func, void *comp_func_fixed_arg, uint size_arg,
       max_in_memory_size(max_in_memory_size_arg),
       record_pointers(nullptr),
       size(size_arg),
+      rec_length(size_arg),
       elements(0) {
   my_b_clear(&file);
   init_tree(&tree,
             /* memory_limit */ 0, size, comp_func,
             /* with_delete */ false,
             /* free_element */ nullptr, comp_func_fixed_arg);
+  flush_element_to_file = unique_write_to_file;
+  action_write_to_ptrs = unique_write_to_ptrs;
+
   /*
     If you change the following, change it in get_max_elements function, too.
   */
@@ -393,7 +374,7 @@ Unique::Unique(qsort2_cmp comp_func, void *comp_func_fixed_arg, uint size_arg,
   @return log2(n!) for the function argument
 */
 
-static inline double log2_n_fact(ulong n) {
+double log2_n_fact(ulong n) {
   /*
     Stirling's approximation produces a small negative value when n is
     1 so we handle this as a special case in order to avoid negative
@@ -633,7 +614,7 @@ bool Unique::flush() {
   file_ptr.set_rowcount(tree.elements_in_tree);
   file_ptr.set_file_position(my_b_tell(&file));
 
-  if (tree_walk(&tree, unique_write_to_file, this, left_root_right) ||
+  if (tree_walk(&tree, flush_element_to_file, this, left_root_right) ||
       file_ptrs.push_back(file_ptr))
     return true; /* purecov: inspected */
   delete_tree(&tree);
@@ -884,6 +865,10 @@ bool Unique::walk(tree_walk_action action, void *walk_action_arg) {
   return res;
 }
 
+ulong Unique::get_n_record_pointers() {
+  return is_in_memory() ? tree.elements_in_tree : 0;
+}
+
 /*
   Modify the TABLE element so that when one calls init_records()
   the rows will be read in priority order.
@@ -898,9 +883,9 @@ bool Unique::get(TABLE *table) {
     assert(table->unique_result.sorted_result == nullptr);
     table->unique_result.sorted_result.reset(
         (uchar *)my_malloc(key_memory_Filesort_info_record_pointers,
-                           size * tree.elements_in_tree, MYF(0)));
+                           size * get_n_record_pointers(), MYF(0)));
     if ((record_pointers = table->unique_result.sorted_result.get())) {
-      (void)tree_walk(&tree, unique_write_to_ptrs, this, left_root_right);
+      (void) tree_walk(&tree, action_write_to_ptrs, this, left_root_right);
       return false;
     }
   }
@@ -927,7 +912,7 @@ bool Unique::get(TABLE *table) {
 
   Uniq_param uniq_param;
   uniq_param.max_rows = elements;
-  uniq_param.rec_length = size;
+  uniq_param.rec_length = rec_length;
   uniq_param.max_keys_per_buffer =
       static_cast<uint>(max_in_memory_size / uniq_param.rec_length);
   uniq_param.not_killable = true;
@@ -952,7 +937,7 @@ bool Unique::get(TABLE *table) {
   if (flush_io_cache(&file) ||
       reinit_io_cache(&file, READ_CACHE, 0L, false, false))
     goto err;
-  if (merge_buffers(thd, &uniq_param, &file, outfile,
+  if (Merge_buffers(thd, &uniq_param, &file, outfile,
                     Sort_buffer(sort_memory, num_bytes), file_ptr,
                     Merge_chunk_array(file_ptr, num_chunks), 0))
     goto err;

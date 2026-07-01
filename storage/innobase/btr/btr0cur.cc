@@ -5239,11 +5239,15 @@ static int64_t btr_estimate_n_rows_in_range_low(
       }
 
       if (i > divergence_level + 1 && !is_n_rows_exact) {
+#if 0
         /* In trees whose height is > 1 our algorithm
         tends to underestimate: multiply the estimate
         by 2: */
 
         n_rows = n_rows * 2;
+#else
+        n_rows = n_rows * 1.01;
+#endif
       }
 
       DBUG_EXECUTE_IF("bug14007649", return (n_rows););

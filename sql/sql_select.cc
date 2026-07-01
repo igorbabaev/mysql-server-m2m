@@ -5484,6 +5484,7 @@ join_type calc_join_type(AccessPath *path) {
     case AccessPath::GROUP_INDEX_SKIP_SCAN:
       return JT_RANGE;
     case AccessPath::INDEX_MERGE:
+    case AccessPath::INDEX_INTERSECTION:
     case AccessPath::ROWID_INTERSECTION:
     case AccessPath::ROWID_UNION:
       return JT_INDEX_MERGE;

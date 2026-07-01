@@ -5174,6 +5174,9 @@ string PrintAccessPath(const AccessPath &path, const JoinHypergraph &graph,
     case AccessPath::INDEX_MERGE:
       str += "INDEX_MERGE";
       break;
+    case AccessPath::INDEX_INTERSECTION:
+      str += "INDEX_INTERSECTION";
+      break;
     case AccessPath::ROWID_INTERSECTION:
       str += "ROWID_INTERSECTION";
       break;

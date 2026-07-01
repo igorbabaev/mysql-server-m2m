@@ -220,6 +220,8 @@ TREE_ELEMENT *tree_insert(TREE *tree, void *key, uint key_size,
     }
   }
   if (element == &tree->null_element) {
+    if (tree->flag & TREE_ONLY_DUPS) return TREE_ELEMENT_UNIQUE;
+
     const uint alloc_size =
         sizeof(TREE_ELEMENT) + key_size + tree->size_of_element;
     tree->allocated += alloc_size;

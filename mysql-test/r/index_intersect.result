@@ -1,0 +1,517 @@
+set global sort_buffer_size=1024*1024*8;
+create table t10 (a int) engine=myisam;
+insert into t10 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+create table t100 as select 10*r2.a+r1.a as a from t10 as r1, t10 as r2;
+create table t1K as select 10*r2.a+r1.a as a from t10 as r1, t100 as r2;
+create table t100K as select 100*r2.a + r1.a as a from t100 as r1, t1K as r2;
+create table ta (pk int primary key auto_increment, a int) engine=myisam;
+insert into ta(a) select a mod 1000 from t100K order by rand(13);
+create table tb (pk int primary key auto_increment, a int) engine=myisam;
+insert into tb(a) select a mod 500 from t100K order by rand(17);
+create table tc (pk int primary key auto_increment, a int) engine=myisam;
+insert into tc(a) select a mod 2000 from t100K order by rand(19);
+create table t1(
+pk int primary key auto_increment,
+a int,
+b int,
+c int,
+d int,
+filler1 char(255) default 'xxx',
+filler2 char(255) default 'yyy',
+filler3 char(255) default 'zzz'
+) engine=innodb;
+insert into t1(a,b,c,d,filler1,filler2)
+select ta.a, tb.a, tc.a, ta.a,
+concat('xxx',ta.pk),
+concat(concat(concat(concat('yyy',tc.a),tc.a),tc.a),tc.a)
+from ta, tb, tc
+where ta.pk = tb.pk and ta.pk = tc.pk;
+drop table ta,tb,tc;
+create index idx_a on t1(a);
+create index idx_b on t1(b);
+create index idx_c on t1(c);
+analyze table t1;
+Table	Op	Msg_type	Msg_text
+test.t1	analyze	status	OK
+update mysql.server_cost set cost_value=0.0002
+where cost_name='key_compare_cost';
+update mysql.server_cost set cost_value=0.005
+where cost_name='row_evaluate_cost';
+flush optimizer_costs;
+set global sort_buffer_size=default;
+set global innodb_stats_persistent=on;
+set optimizer_switch='index_merge_sort_intersection=on';
+select @@sort_buffer_size;
+@@sort_buffer_size
+262144
+# index intersect of 2 secondary indeces over 2 sargable ranges
+explain
+select * from t1 where a between 0 and 19 and b between 0 and 9;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b	idx_a,idx_b	5,5	NULL	42	99.19	Using sort_intersection(idx_a,idx_b); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 19) and (`test`.`t1`.`b` between 0 and 9))
+select * from t1 where a between 0 and 19 and b between 0 and 9;
+pk	a	b	c	d	filler1	filler2	filler3
+1530	8	6	1533	8	xxx1530	yyy1533153315331533	zzz
+1629	9	6	355	9	xxx1629	yyy355355355355	zzz
+3837	6	7	1861	6	xxx3837	yyy1861186118611861	zzz
+3888	14	5	418	14	xxx3888	yyy418418418418	zzz
+10282	17	4	1018	17	xxx10282	yyy1018101810181018	zzz
+12469	5	5	877	5	xxx12469	yyy877877877877	zzz
+14917	17	1	1531	17	xxx14917	yyy1531153115311531	zzz
+19821	13	3	744	13	xxx19821	yyy744744744744	zzz
+20085	17	8	798	17	xxx20085	yyy798798798798	zzz
+20228	18	0	1947	18	xxx20228	yyy1947194719471947	zzz
+21560	9	3	1098	9	xxx21560	yyy1098109810981098	zzz
+23127	19	9	844	19	xxx23127	yyy844844844844	zzz
+24312	8	6	234	8	xxx24312	yyy234234234234	zzz
+25795	14	4	957	14	xxx25795	yyy957957957957	zzz
+27881	8	2	4	8	xxx27881	yyy4444	zzz
+29546	0	7	726	0	xxx29546	yyy726726726726	zzz
+30742	17	1	1371	17	xxx30742	yyy1371137113711371	zzz
+30772	0	9	963	0	xxx30772	yyy963963963963	zzz
+33527	6	6	1317	6	xxx33527	yyy1317131713171317	zzz
+35214	7	8	886	7	xxx35214	yyy886886886886	zzz
+36038	2	0	1544	2	xxx36038	yyy1544154415441544	zzz
+36159	7	4	1074	7	xxx36159	yyy1074107410741074	zzz
+38674	4	5	732	4	xxx38674	yyy732732732732	zzz
+40605	15	0	1904	15	xxx40605	yyy1904190419041904	zzz
+41216	4	2	652	4	xxx41216	yyy652652652652	zzz
+52750	16	0	1561	16	xxx52750	yyy1561156115611561	zzz
+58090	0	5	1791	0	xxx58090	yyy1791179117911791	zzz
+65896	6	0	1676	6	xxx65896	yyy1676167616761676	zzz
+67352	11	8	990	11	xxx67352	yyy990990990990	zzz
+69094	7	0	433	7	xxx69094	yyy433433433433	zzz
+71783	16	0	607	16	xxx71783	yyy607607607607	zzz
+75131	6	3	328	6	xxx75131	yyy328328328328	zzz
+75298	13	0	582	13	xxx75298	yyy582582582582	zzz
+76459	7	6	685	7	xxx76459	yyy685685685685	zzz
+76754	8	5	1538	8	xxx76754	yyy1538153815381538	zzz
+77051	7	9	1357	7	xxx77051	yyy1357135713571357	zzz
+82553	5	1	1358	5	xxx82553	yyy1358135813581358	zzz
+85907	9	5	1422	9	xxx85907	yyy1422142214221422	zzz
+86694	3	8	661	3	xxx86694	yyy661661661661	zzz
+87752	7	2	1613	7	xxx87752	yyy1613161316131613	zzz
+87964	0	3	738	0	xxx87964	yyy738738738738	zzz
+88023	12	4	724	12	xxx88023	yyy724724724724	zzz
+88841	3	2	184	3	xxx88841	yyy184184184184	zzz
+89837	12	8	1754	12	xxx89837	yyy1754175417541754	zzz
+92164	0	3	1373	0	xxx92164	yyy1373137313731373	zzz
+93757	10	9	1652	10	xxx93757	yyy1652165216521652	zzz
+95499	12	9	1256	12	xxx95499	yyy1256125612561256	zzz
+96584	5	9	1624	5	xxx96584	yyy1624162416241624	zzz
+98569	7	1	820	7	xxx98569	yyy820820820820	zzz
+98577	10	8	600	10	xxx98577	yyy600600600600	zzz
+select sum(pk) from t1 where a between 0 and 19 and b between 0 and 9;
+sum(pk)
+2622233
+# check with index range
+select * from t1 force index (idx_a)
+where a between 0 and 19 and b between 0 and 9
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+1530	8	6	1533	8	xxx1530	yyy1533153315331533	zzz
+1629	9	6	355	9	xxx1629	yyy355355355355	zzz
+3837	6	7	1861	6	xxx3837	yyy1861186118611861	zzz
+3888	14	5	418	14	xxx3888	yyy418418418418	zzz
+10282	17	4	1018	17	xxx10282	yyy1018101810181018	zzz
+12469	5	5	877	5	xxx12469	yyy877877877877	zzz
+14917	17	1	1531	17	xxx14917	yyy1531153115311531	zzz
+19821	13	3	744	13	xxx19821	yyy744744744744	zzz
+20085	17	8	798	17	xxx20085	yyy798798798798	zzz
+20228	18	0	1947	18	xxx20228	yyy1947194719471947	zzz
+21560	9	3	1098	9	xxx21560	yyy1098109810981098	zzz
+23127	19	9	844	19	xxx23127	yyy844844844844	zzz
+24312	8	6	234	8	xxx24312	yyy234234234234	zzz
+25795	14	4	957	14	xxx25795	yyy957957957957	zzz
+27881	8	2	4	8	xxx27881	yyy4444	zzz
+29546	0	7	726	0	xxx29546	yyy726726726726	zzz
+30742	17	1	1371	17	xxx30742	yyy1371137113711371	zzz
+30772	0	9	963	0	xxx30772	yyy963963963963	zzz
+33527	6	6	1317	6	xxx33527	yyy1317131713171317	zzz
+35214	7	8	886	7	xxx35214	yyy886886886886	zzz
+36038	2	0	1544	2	xxx36038	yyy1544154415441544	zzz
+36159	7	4	1074	7	xxx36159	yyy1074107410741074	zzz
+38674	4	5	732	4	xxx38674	yyy732732732732	zzz
+40605	15	0	1904	15	xxx40605	yyy1904190419041904	zzz
+41216	4	2	652	4	xxx41216	yyy652652652652	zzz
+52750	16	0	1561	16	xxx52750	yyy1561156115611561	zzz
+58090	0	5	1791	0	xxx58090	yyy1791179117911791	zzz
+65896	6	0	1676	6	xxx65896	yyy1676167616761676	zzz
+67352	11	8	990	11	xxx67352	yyy990990990990	zzz
+69094	7	0	433	7	xxx69094	yyy433433433433	zzz
+71783	16	0	607	16	xxx71783	yyy607607607607	zzz
+75131	6	3	328	6	xxx75131	yyy328328328328	zzz
+75298	13	0	582	13	xxx75298	yyy582582582582	zzz
+76459	7	6	685	7	xxx76459	yyy685685685685	zzz
+76754	8	5	1538	8	xxx76754	yyy1538153815381538	zzz
+77051	7	9	1357	7	xxx77051	yyy1357135713571357	zzz
+82553	5	1	1358	5	xxx82553	yyy1358135813581358	zzz
+85907	9	5	1422	9	xxx85907	yyy1422142214221422	zzz
+86694	3	8	661	3	xxx86694	yyy661661661661	zzz
+87752	7	2	1613	7	xxx87752	yyy1613161316131613	zzz
+87964	0	3	738	0	xxx87964	yyy738738738738	zzz
+88023	12	4	724	12	xxx88023	yyy724724724724	zzz
+88841	3	2	184	3	xxx88841	yyy184184184184	zzz
+89837	12	8	1754	12	xxx89837	yyy1754175417541754	zzz
+92164	0	3	1373	0	xxx92164	yyy1373137313731373	zzz
+93757	10	9	1652	10	xxx93757	yyy1652165216521652	zzz
+95499	12	9	1256	12	xxx95499	yyy1256125612561256	zzz
+96584	5	9	1624	5	xxx96584	yyy1624162416241624	zzz
+98569	7	1	820	7	xxx98569	yyy820820820820	zzz
+98577	10	8	600	10	xxx98577	yyy600600600600	zzz
+select sum(pk) from t1 force index (idx_a)
+where a between 0 and 19 and b between 0 and 9;
+sum(pk)
+2622233
+# index intersect of primary and secondary indeces over 2 sargable ranges
+explain
+select * from t1 where a between 0 and 4 and pk between 1 and 10000;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	PRIMARY,idx_a	idx_a,PRIMARY	9,4	NULL	41	98.57	Using sort_intersection(idx_a,PRIMARY); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 4) and (`test`.`t1`.`pk` between 1 and 10000))
+select * from t1 where a between 0 and 4 and pk between 1 and 10000;
+pk	a	b	c	d	filler1	filler2	filler3
+170	0	449	1394	0	xxx170	yyy1394139413941394	zzz
+230	2	22	908	2	xxx230	yyy908908908908	zzz
+666	4	455	870	4	xxx666	yyy870870870870	zzz
+1266	0	286	1278	0	xxx1266	yyy1278127812781278	zzz
+1320	1	198	1479	1	xxx1320	yyy1479147914791479	zzz
+1407	4	388	1581	4	xxx1407	yyy1581158115811581	zzz
+1874	4	63	155	4	xxx1874	yyy155155155155	zzz
+1992	1	252	1941	1	xxx1992	yyy1941194119411941	zzz
+1996	4	138	660	4	xxx1996	yyy660660660660	zzz
+2431	2	112	554	2	xxx2431	yyy554554554554	zzz
+2571	3	136	1009	3	xxx2571	yyy1009100910091009	zzz
+3084	2	432	255	2	xxx3084	yyy255255255255	zzz
+3120	1	185	319	1	xxx3120	yyy319319319319	zzz
+3389	4	58	656	4	xxx3389	yyy656656656656	zzz
+3485	2	436	654	2	xxx3485	yyy654654654654	zzz
+3728	3	114	789	3	xxx3728	yyy789789789789	zzz
+3743	3	435	636	3	xxx3743	yyy636636636636	zzz
+3883	2	448	1811	2	xxx3883	yyy1811181118111811	zzz
+3893	0	355	1018	0	xxx3893	yyy1018101810181018	zzz
+4547	1	454	1141	1	xxx4547	yyy1141114111411141	zzz
+4748	2	342	126	2	xxx4748	yyy126126126126	zzz
+4906	3	40	743	3	xxx4906	yyy743743743743	zzz
+5019	1	72	1828	1	xxx5019	yyy1828182818281828	zzz
+5308	0	128	1868	0	xxx5308	yyy1868186818681868	zzz
+5400	2	64	1302	2	xxx5400	yyy1302130213021302	zzz
+5622	2	225	1545	2	xxx5622	yyy1545154515451545	zzz
+5740	2	56	1797	2	xxx5740	yyy1797179717971797	zzz
+6204	3	204	1535	3	xxx6204	yyy1535153515351535	zzz
+7231	2	237	1065	2	xxx7231	yyy1065106510651065	zzz
+7775	2	473	1862	2	xxx7775	yyy1862186218621862	zzz
+7871	0	237	1232	0	xxx7871	yyy1232123212321232	zzz
+7949	2	25	300	2	xxx7949	yyy300300300300	zzz
+8022	4	129	109	4	xxx8022	yyy109109109109	zzz
+8275	0	421	289	0	xxx8275	yyy289289289289	zzz
+8451	1	46	466	1	xxx8451	yyy466466466466	zzz
+8649	1	204	1329	1	xxx8649	yyy1329132913291329	zzz
+8748	1	202	746	1	xxx8748	yyy746746746746	zzz
+8811	4	89	280	4	xxx8811	yyy280280280280	zzz
+8884	4	184	1366	4	xxx8884	yyy1366136613661366	zzz
+9169	4	206	465	4	xxx9169	yyy465465465465	zzz
+9500	1	68	152	1	xxx9500	yyy152152152152	zzz
+9538	2	301	778	2	xxx9538	yyy778778778778	zzz
+9578	4	17	1620	4	xxx9578	yyy1620162016201620	zzz
+9903	3	156	1060	3	xxx9903	yyy1060106010601060	zzz
+9943	0	183	1360	0	xxx9943	yyy1360136013601360	zzz
+select sum(pk) from t1 where a between 0 and 4 and pk between 1 and 10000;
+sum(pk)
+240039
+# check with index scan
+select * from t1 force index (idx_b)
+where a between 0 and 4 and pk between 1 and 10000
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+170	0	449	1394	0	xxx170	yyy1394139413941394	zzz
+230	2	22	908	2	xxx230	yyy908908908908	zzz
+666	4	455	870	4	xxx666	yyy870870870870	zzz
+1266	0	286	1278	0	xxx1266	yyy1278127812781278	zzz
+1320	1	198	1479	1	xxx1320	yyy1479147914791479	zzz
+1407	4	388	1581	4	xxx1407	yyy1581158115811581	zzz
+1874	4	63	155	4	xxx1874	yyy155155155155	zzz
+1992	1	252	1941	1	xxx1992	yyy1941194119411941	zzz
+1996	4	138	660	4	xxx1996	yyy660660660660	zzz
+2431	2	112	554	2	xxx2431	yyy554554554554	zzz
+2571	3	136	1009	3	xxx2571	yyy1009100910091009	zzz
+3084	2	432	255	2	xxx3084	yyy255255255255	zzz
+3120	1	185	319	1	xxx3120	yyy319319319319	zzz
+3389	4	58	656	4	xxx3389	yyy656656656656	zzz
+3485	2	436	654	2	xxx3485	yyy654654654654	zzz
+3728	3	114	789	3	xxx3728	yyy789789789789	zzz
+3743	3	435	636	3	xxx3743	yyy636636636636	zzz
+3883	2	448	1811	2	xxx3883	yyy1811181118111811	zzz
+3893	0	355	1018	0	xxx3893	yyy1018101810181018	zzz
+4547	1	454	1141	1	xxx4547	yyy1141114111411141	zzz
+4748	2	342	126	2	xxx4748	yyy126126126126	zzz
+4906	3	40	743	3	xxx4906	yyy743743743743	zzz
+5019	1	72	1828	1	xxx5019	yyy1828182818281828	zzz
+5308	0	128	1868	0	xxx5308	yyy1868186818681868	zzz
+5400	2	64	1302	2	xxx5400	yyy1302130213021302	zzz
+5622	2	225	1545	2	xxx5622	yyy1545154515451545	zzz
+5740	2	56	1797	2	xxx5740	yyy1797179717971797	zzz
+6204	3	204	1535	3	xxx6204	yyy1535153515351535	zzz
+7231	2	237	1065	2	xxx7231	yyy1065106510651065	zzz
+7775	2	473	1862	2	xxx7775	yyy1862186218621862	zzz
+7871	0	237	1232	0	xxx7871	yyy1232123212321232	zzz
+7949	2	25	300	2	xxx7949	yyy300300300300	zzz
+8022	4	129	109	4	xxx8022	yyy109109109109	zzz
+8275	0	421	289	0	xxx8275	yyy289289289289	zzz
+8451	1	46	466	1	xxx8451	yyy466466466466	zzz
+8649	1	204	1329	1	xxx8649	yyy1329132913291329	zzz
+8748	1	202	746	1	xxx8748	yyy746746746746	zzz
+8811	4	89	280	4	xxx8811	yyy280280280280	zzz
+8884	4	184	1366	4	xxx8884	yyy1366136613661366	zzz
+9169	4	206	465	4	xxx9169	yyy465465465465	zzz
+9500	1	68	152	1	xxx9500	yyy152152152152	zzz
+9538	2	301	778	2	xxx9538	yyy778778778778	zzz
+9578	4	17	1620	4	xxx9578	yyy1620162016201620	zzz
+9903	3	156	1060	3	xxx9903	yyy1060106010601060	zzz
+9943	0	183	1360	0	xxx9943	yyy1360136013601360	zzz
+select sum(pk) from t1 force index (idx_b)
+where a between 0 and 4 and pk between 1 and 10000;
+sum(pk)
+240039
+# index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+where a between 0 and 39 and b between 0 and 19 and c between 0 and 79;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b,idx_c	idx_a,idx_b,idx_c	5,5,5	NULL	7	97.61	Using sort_intersection(idx_a,idx_b,idx_c); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 39) and (`test`.`t1`.`b` between 0 and 19) and (`test`.`t1`.`c` between 0 and 79))
+select * from t1
+where a between 0 and 39 and b between 0 and 19 and c between 0 and 79;
+pk	a	b	c	d	filler1	filler2	filler3
+27881	8	2	4	8	xxx27881	yyy4444	zzz
+47677	35	8	15	35	xxx47677	yyy15151515	zzz
+63428	26	18	27	26	xxx63428	yyy27272727	zzz
+90036	29	1	27	29	xxx90036	yyy27272727	zzz
+# check with index scan
+select * from t1 force index (idx_a)
+where a between 0 and 39 and b between 0 and 19 and c between 0 and 79
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+27881	8	2	4	8	xxx27881	yyy4444	zzz
+47677	35	8	15	35	xxx47677	yyy15151515	zzz
+63428	26	18	27	26	xxx63428	yyy27272727	zzz
+90036	29	1	27	29	xxx90036	yyy27272727	zzz
+# index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+where a between 40 and 79 and b between 0 and 19 and c between 0 and 74;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b,idx_c	idx_c,idx_a,idx_b	5,5,5	NULL	6	89.24	Using sort_intersection(idx_c,idx_a,idx_b); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 40 and 79) and (`test`.`t1`.`b` between 0 and 19) and (`test`.`t1`.`c` between 0 and 74))
+select * from t1
+where a between 40 and 79 and b between 0 and 19 and c between 0 and 74;
+pk	a	b	c	d	filler1	filler2	filler3
+5255	56	19	72	56	xxx5255	yyy72727272	zzz
+21964	46	17	7	46	xxx21964	yyy7777	zzz
+29941	71	15	31	71	xxx29941	yyy31313131	zzz
+29973	74	10	57	74	xxx29973	yyy57575757	zzz
+32698	75	14	54	75	xxx32698	yyy54545454	zzz
+56765	44	16	58	44	xxx56765	yyy58585858	zzz
+82927	78	16	53	78	xxx82927	yyy53535353	zzz
+# check with index scan
+select * from t1 force index (idx_a)
+where a between 40 and 79 and b between 0 and 19 and c between 0 and 74
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+5255	56	19	72	56	xxx5255	yyy72727272	zzz
+21964	46	17	7	46	xxx21964	yyy7777	zzz
+29941	71	15	31	71	xxx29941	yyy31313131	zzz
+29973	74	10	57	74	xxx29973	yyy57575757	zzz
+32698	75	14	54	75	xxx32698	yyy54545454	zzz
+56765	44	16	58	44	xxx56765	yyy58585858	zzz
+82927	78	16	53	78	xxx82927	yyy53535353	zzz
+# index intersect of 3 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+where a between 0 and 39 and b between 20 and 37 and c between 0 and 79;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b,idx_c	idx_b,idx_a,idx_c	5,5,5	NULL	6	92.96	Using sort_intersection(idx_b,idx_a,idx_c); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 39) and (`test`.`t1`.`b` between 20 and 37) and (`test`.`t1`.`c` between 0 and 79))
+select * from t1
+where a between 0 and 39 and b between 20 and 37 and c between 0 and 79;
+pk	a	b	c	d	filler1	filler2	filler3
+29337	21	35	17	21	xxx29337	yyy17171717	zzz
+35141	29	24	72	29	xxx35141	yyy72727272	zzz
+46288	21	23	44	21	xxx46288	yyy44444444	zzz
+47268	21	20	58	21	xxx47268	yyy58585858	zzz
+76726	39	20	23	39	xxx76726	yyy23232323	zzz
+90587	33	25	10	33	xxx90587	yyy10101010	zzz
+90910	12	35	4	12	xxx90910	yyy4444	zzz
+# check with index scan
+select * from t1 force index (idx_a)
+where a between 0 and 39 and b between 20 and 37 and c between 0 and 79
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+29337	21	35	17	21	xxx29337	yyy17171717	zzz
+35141	29	24	72	29	xxx35141	yyy72727272	zzz
+46288	21	23	44	21	xxx46288	yyy44444444	zzz
+47268	21	20	58	21	xxx47268	yyy58585858	zzz
+76726	39	20	23	39	xxx76726	yyy23232323	zzz
+90587	33	25	10	33	xxx90587	yyy10101010	zzz
+90910	12	35	4	12	xxx90910	yyy4444	zzz
+# intersect of primary and 2 secondary indeces over 3 sargable ranges
+explain
+select count(distinct a,b,c) from t1
+where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	PRIMARY,idx_a,idx_b	idx_a,idx_b,PRIMARY	9,9,4	NULL	18	96.27	Using sort_intersection(idx_a,idx_b,PRIMARY); Using where
+Warnings:
+Note	1003	/* select#1 */ select count(distinct `test`.`t1`.`a`,`test`.`t1`.`b`,`test`.`t1`.`c`) AS `count(distinct a,b,c)` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 19) and (`test`.`t1`.`b` between 30 and 40) and (`test`.`t1`.`pk` between 0 and 40000))
+select count(distinct a,b,c) from t1
+where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+count(distinct a,b,c)
+18
+select sum(pk) from t1
+where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+sum(pk)
+437957
+# check with index scan
+select count(distinct a,b,c) from t1 force index (idx_a)
+where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+count(distinct a,b,c)
+18
+select sum(pk) from t1 force index (idx_a)
+where a between 0 and 19 and b between 30 and 40 and pk between 0 and 40000;
+sum(pk)
+437957
+# index intersect of 2 secondary indeces over 3 sargable ranges
+explain
+select * from t1
+where a between 20 and 59 and b between 20 and 94 and c between 10 and 79;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b,idx_c	idx_c,idx_a	5,5	NULL	148	14.91	Using sort_intersection(idx_c,idx_a); Using where
+Warnings:
+Note	1003	/* select#1 */ select `test`.`t1`.`pk` AS `pk`,`test`.`t1`.`a` AS `a`,`test`.`t1`.`b` AS `b`,`test`.`t1`.`c` AS `c`,`test`.`t1`.`d` AS `d`,`test`.`t1`.`filler1` AS `filler1`,`test`.`t1`.`filler2` AS `filler2`,`test`.`t1`.`filler3` AS `filler3` from `test`.`t1` where ((`test`.`t1`.`a` between 20 and 59) and (`test`.`t1`.`b` between 20 and 94) and (`test`.`t1`.`c` between 10 and 79))
+select * from t1
+where a between 20 and 59 and b between 20 and 94 and c between 10 and 79;
+pk	a	b	c	d	filler1	filler2	filler3
+641	55	85	32	55	xxx641	yyy32323232	zzz
+9148	57	44	76	57	xxx9148	yyy76767676	zzz
+20809	30	76	19	30	xxx20809	yyy19191919	zzz
+29337	21	35	17	21	xxx29337	yyy17171717	zzz
+31381	27	40	53	27	xxx31381	yyy53535353	zzz
+35141	29	24	72	29	xxx35141	yyy72727272	zzz
+36525	25	58	61	25	xxx36525	yyy61616161	zzz
+37498	44	72	43	44	xxx37498	yyy43434343	zzz
+46288	21	23	44	21	xxx46288	yyy44444444	zzz
+47268	21	20	58	21	xxx47268	yyy58585858	zzz
+51257	49	93	66	49	xxx51257	yyy66666666	zzz
+51334	57	59	68	57	xxx51334	yyy68686868	zzz
+56676	44	22	27	44	xxx56676	yyy27272727	zzz
+58918	54	26	59	54	xxx58918	yyy59595959	zzz
+59234	38	90	52	38	xxx59234	yyy52525252	zzz
+64345	49	67	48	49	xxx64345	yyy48484848	zzz
+74583	58	92	55	58	xxx74583	yyy55555555	zzz
+76726	39	20	23	39	xxx76726	yyy23232323	zzz
+83043	50	28	23	50	xxx83043	yyy23232323	zzz
+89664	44	56	37	44	xxx89664	yyy37373737	zzz
+90587	33	25	10	33	xxx90587	yyy10101010	zzz
+# check with index scan
+select * from t1 force index (idx_a)
+where a between 20 and 59 and b between 20 and 94 and c between 10 and 79
+order by pk;
+pk	a	b	c	d	filler1	filler2	filler3
+641	55	85	32	55	xxx641	yyy32323232	zzz
+9148	57	44	76	57	xxx9148	yyy76767676	zzz
+20809	30	76	19	30	xxx20809	yyy19191919	zzz
+29337	21	35	17	21	xxx29337	yyy17171717	zzz
+31381	27	40	53	27	xxx31381	yyy53535353	zzz
+35141	29	24	72	29	xxx35141	yyy72727272	zzz
+36525	25	58	61	25	xxx36525	yyy61616161	zzz
+37498	44	72	43	44	xxx37498	yyy43434343	zzz
+46288	21	23	44	21	xxx46288	yyy44444444	zzz
+47268	21	20	58	21	xxx47268	yyy58585858	zzz
+51257	49	93	66	49	xxx51257	yyy66666666	zzz
+51334	57	59	68	57	xxx51334	yyy68686868	zzz
+56676	44	22	27	44	xxx56676	yyy27272727	zzz
+58918	54	26	59	54	xxx58918	yyy59595959	zzz
+59234	38	90	52	38	xxx59234	yyy52525252	zzz
+64345	49	67	48	49	xxx64345	yyy48484848	zzz
+74583	58	92	55	58	xxx74583	yyy55555555	zzz
+76726	39	20	23	39	xxx76726	yyy23232323	zzz
+83043	50	28	23	50	xxx83043	yyy23232323	zzz
+89664	44	56	37	44	xxx89664	yyy37373737	zzz
+90587	33	25	10	33	xxx90587	yyy10101010	zzz
+# intersect of primary and 1 secondary indeces over 3 sargable ranges
+explain
+select count(distinct a,b,c) from t1
+where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	PRIMARY,idx_a,idx_b	idx_a,PRIMARY	9,4	NULL	90	15.59	Using sort_intersection(idx_a,PRIMARY); Using where
+Warnings:
+Note	1003	/* select#1 */ select count(distinct `test`.`t1`.`a`,`test`.`t1`.`b`,`test`.`t1`.`c`) AS `count(distinct a,b,c)` from `test`.`t1` where ((`test`.`t1`.`a` between 40 and 44) and (`test`.`t1`.`b` between 10 and 90) and (`test`.`t1`.`pk` between 0 and 20000))
+select count(distinct a,b,c) from t1
+where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+count(distinct a,b,c)
+12
+select sum(pk) from t1
+where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+sum(pk)
+123701
+# check with index scan
+select count(distinct a,b,c) from t1 force index (idx_a)
+where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+count(distinct a,b,c)
+12
+select sum(pk) from t1 force index (idx_a)
+where a between 40 and 44 and b between 10 and 90 and pk between 0 and 20000;
+sum(pk)
+123701
+set global sort_buffer_size=1024*32;
+set optimizer_switch='index_merge_sort_intersection=on';
+# test how index intersection works with a small sort buffer
+select @@sort_buffer_size;
+@@sort_buffer_size
+32768
+# intersect of primary and secondary indeces over 2 sargable ranges
+explain
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ count(distinct a,b,c) from t1
+where a between 0 and 99 and b between 0 and 49;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	index_merge	idx_a,idx_b	idx_a,idx_b	5,5	NULL	1058	99.95	Using sort_intersection(idx_a,idx_b); Using where
+Warnings:
+Note	1003	/* select#1 */ select /*+ INDEX_MERGE(`t1`@`select#1` `idx_a`, `idx_b`) */ count(distinct `test`.`t1`.`a`,`test`.`t1`.`b`,`test`.`t1`.`c`) AS `count(distinct a,b,c)` from `test`.`t1` where ((`test`.`t1`.`a` between 0 and 99) and (`test`.`t1`.`b` between 0 and 49))
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ count(distinct a,b,c) from t1
+where a between 0 and 99 and b between 0 and 49;
+count(distinct a,b,c)
+1022
+select /*+ INDEX_MERGE(t1 idx_a,idx_b) */ sum(pk) from t1
+where a between 0 and 99 and b between 0 and 49;
+sum(pk)
+52041613
+# check with index scan
+explain
+select count(distinct a,b,c) from t1 force index (idx_a)
+where a between 0 and 99 and b between 0 and 49;
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	NULL	range	idx_a	idx_a	5	NULL	10000	11.11	Using index condition; Using where; Using MRR
+Warnings:
+Note	1003	/* select#1 */ select count(distinct `test`.`t1`.`a`,`test`.`t1`.`b`,`test`.`t1`.`c`) AS `count(distinct a,b,c)` from `test`.`t1` FORCE INDEX (`idx_a`) where ((`test`.`t1`.`a` between 0 and 99) and (`test`.`t1`.`b` between 0 and 49))
+select count(distinct a,b,c) from t1 use index (idx_a)
+where a between 0 and 99 and b between 0 and 49;
+count(distinct a,b,c)
+1022
+select sum(pk) from t1 force index (idx_a)
+where a between 0 and 99 and b between 0 and 49;
+sum(pk)
+52041613
+drop table t1;
+drop table t100K,t1K,t100,t10;
+update mysql.server_cost set cost_value=default_value
+where cost_name='key_compare_cost';
+update mysql.server_cost set cost_value=default_value
+where cost_name='row_evaluate_cost';
+flush optimizer_costs;
+set global sort_buffer_size=default;
+set global innodb_stats_persistent=default;
